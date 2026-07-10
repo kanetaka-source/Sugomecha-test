@@ -1,0 +1,34 @@
+/* =========================================================================
+   Design tokens — IZUMI SUGO MECHA  (extracted from Figma node 6009-7308)
+   ========================================================================= */
+:root {
+  /* Brand */
+  --color-brand:       #3d40b8;  /* primary indigo (buttons/active) */
+  --color-brand-deep:  #2f318e;  /* deep indigo (header) */
+  --color-brand-navy:  #262772;  /* darkest navy (login card) */
+  --color-brand-light: #7ecef4;  /* light cyan accent */
+  --color-accent:      #3ea5ff;  /* action buttons (自己評価 等) */
+  --color-disabled:    #bcbcbc;  /* grey buttons (login default) */
+  --color-magenta:     #f96ccf;  /* admin search button */
+
+  /* Gauge / progress gradient */
+  --grad-from: #4652ff;          /* blue */
+  --grad-to:   #ffacb6;          /* pink */
+
+  /* Status */
+  --color-gold:   #f5c518;       /* active master badge */
+  --color-danger: #e23b3b;
+  --color-ok:     #2ec16b;
+
+  /* Neutrals */
+  --color-ink:    #4c4c4c;       /* primary text */
+  --color-ink2:   #4f4f4f;       /* section titles */
+  --color-muted:  #9c9c9c;       /* labels / inactive */
+  --color-line:   #e4e3e4;       /* borders */
+  --color-line2:  #dfdfdf;
+  --color-surface:#fefefe;       /* cards */
+  --color-canvas: #f4f5fa;       /* page background */
+
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+}

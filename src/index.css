@@ -1,0 +1,57 @@
+@import './styles/tokens.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  /* 青→ピンクのグラデーション枠カード（ゲージと同じ #4652ff → #ffacb6） */
+  .card-grad {
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-card);
+    background:
+      linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+      linear-gradient(135deg, var(--grad-from), var(--grad-to)) border-box;
+  }
+
+  /* STEPタブ：左角のみ丸い、青→ピンクのグラデーション枠（カードと共通の配色） */
+  .tab-grad-active {
+    border: 1.5px solid transparent;
+    border-radius: 5px 0 0 5px;
+    background:
+      linear-gradient(90deg, var(--grad-from), var(--grad-to)) padding-box,
+      linear-gradient(135deg, var(--grad-from), var(--grad-to)) border-box;
+  }
+  .tab-grad-idle {
+    border: 1.5px solid transparent;
+    border-radius: 5px 0 0 5px;
+    background:
+      linear-gradient(var(--color-disabled), var(--color-disabled)) padding-box,
+      linear-gradient(135deg, var(--grad-from), var(--grad-to)) border-box;
+  }
+
+  /* 縦スクロール領域：丸いスクロールバー（Figma 準拠） */
+  .scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-brand) var(--color-line);
+  }
+  .scroll-area::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scroll-area::-webkit-scrollbar-track {
+    background: var(--color-line);
+    border-radius: 9999px;
+  }
+  .scroll-area::-webkit-scrollbar-thumb {
+    background: var(--color-brand);
+    border-radius: 9999px;
+  }
+}

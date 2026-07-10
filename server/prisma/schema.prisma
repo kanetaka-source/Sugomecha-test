@@ -1,0 +1,378 @@
+// IZUMI すごメカ — バックエンドのDB定義（Prisma）
+// 本番: Supabase (PostgreSQL)。DATABASE_URL=接続プーラー(6543) / DIRECT_URL=直接接続(5432)。
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// 拠点マスタ（データ要件スプレッドシート準拠）
+// 項目: 拠点ID（内部=id）/ 拠点名 / 備考 / 拠点一覧表示順 /（拠点所属数は社員数の自動集計＝非保存）
+model Location {
+  id          Int          @id @default(autoincrement()) // 拠点ID（内部）
+  name        String // 拠点名（必須）
+  note        String? // 備考（任意）
+  sortOrder   Int          @default(0) // 拠点一覧表示順（内部）
+  departments Department[] // この拠点に紐づく部門
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// 部門マスタ（データ要件スプレッドシート準拠。拠点マスタと同構造）
+// 項目: 部署ID（内部=id）/ 部署名 / 備考 / 部署一覧表示順 /（部署所属数は社員数の自動集計＝非保存）
+model Department {
+  id         Int        @id @default(autoincrement()) // 部署ID（内部）
+  name       String // 部署名（必須）
+  note       String? // 備考（任意）
+  sortOrder  Int        @default(0) // 部署一覧表示順（内部）
+  locationId Int? // 紐づく拠点（任意）
+  location   Location?  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  employees  Employee[] // この部署に所属する社員
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+// 研修コースマスタ（データ要件スプレッドシート準拠。拠点/部門と同構造）
+// 項目: 研修コースID（内部=id）/ 研修コース名 / 備考 / 研修コース表示順
+//      （研修セクション数は紐づくセクション数の自動集計＝非保存。セクションマスタ作成時に連動）
+model TrainingCourse {
+  id        Int               @id @default(autoincrement()) // 研修コースID（内部）
+  name      String // 研修コース名（必須）
+  note      String? // 備考（任意）
+  icon      String? // 研修メニュー表示用アイコン（large/small/electrical/body/paint）
+  sortOrder Int               @default(0) // 研修コース表示順（内部）
+  sections          TrainingSection[] // このコースに紐づく研修セクション
+  enrolledEmployees Employee[]        @relation("EmployeeCourses") // このコースを履修する社員
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+// 研修セクションマスタ（データ要件スプレッドシート準拠・フル）
+// 自己評価テーブルの列構成を定義する設定マスタ。研修コースに紐づく。
+// 後回し: 筆記試験の設問(最大50問)・合格基準（＝筆記試験機能の子テーブル）/ 研修項目数(項目マスタ作成時に集計)
+model TrainingSection {
+  id        Int             @id @default(autoincrement()) // 研修セクションID（内部）
+  name      String // 研修セクション名（必須）
+  note      String? // 備考（任意）
+  sortOrder Int             @default(0) // 研修セクション表示順（内部）
+  courseId  Int? // 紐づく研修コース
+  course    TrainingCourse? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  // 研修ヘッダー（列見出し）1〜5：表示フラグ＋表示名
+  header1Flag Boolean @default(true)
+  header1Name String?
+  header2Flag Boolean @default(false)
+  header2Name String?
+  header3Flag Boolean @default(false)
+  header3Name String?
+  header4Flag Boolean @default(false)
+  header4Name String?
+  header5Flag Boolean @default(false)
+  header5Name String?
+
+  // 自己評価 1〜2：表示フラグ＋種別＋ヘッダー名＋カウント目標回数（種別=カウント時。1〜10）
+  selfEval1Flag Boolean @default(false)
+  selfEval1Type String?
+  selfEval1Name String?
+  selfEval1Count Int     @default(0)
+  selfEval2Flag Boolean @default(false)
+  selfEval2Type String?
+  selfEval2Name String?
+  selfEval2Count Int     @default(0)
+
+  // 管理者評価 1〜3：表示フラグ＋種別＋ヘッダー名＋カウント目標回数（種別=カウント時。1〜10）
+  adminEval1Flag Boolean @default(false)
+  adminEval1Type String?
+  adminEval1Name String?
+  adminEval1Count Int    @default(0)
+  adminEval2Flag Boolean @default(false)
+  adminEval2Type String?
+  adminEval2Name String?
+  adminEval2Count Int    @default(0)
+  adminEval3Flag Boolean @default(false)
+  adminEval3Type String?
+  adminEval3Name String?
+  adminEval3Count Int    @default(0)
+
+  examPassLine Int? // 筆記試験の合格ライン（正答率％。未設定はnull）
+
+  items           TrainingItem[]     // このセクションに紐づく研修項目
+  examQuestions   ExamQuestion[]     // このセクションの筆記試験の設問
+  examApplications ExamApplication[] // このセクションへの筆記試験申請
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+// 筆記試験マスタ（研修セクションに紐づく設問）
+// 解答形式は YES/NO（answer=正解）。設問内容・解説・正解を登録。合格ラインはセクション側(examPassLine)。
+model ExamQuestion {
+  id          Int              @id @default(autoincrement()) // 設問ID（内部）
+  content     String // 設問内容（必須）
+  answer      Boolean          @default(true) // 正解（true=YES / false=NO）
+  explanation String? // 解説（任意）
+  sortOrder   Int              @default(0) // 設問表示順（内部）
+  sectionId   Int? // 紐づく研修セクション
+  section     TrainingSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+// 研修項目マスタ（データ要件スプレッドシート準拠）
+// セクションに紐づく行データ。研修項目1〜5 はセクションの研修ヘッダー（列見出し）に対応する各セルの値。
+model TrainingItem {
+  id        Int              @id @default(autoincrement()) // 研修項目ID（内部）
+  title     String // 研修項目タイトル（必須）
+  note      String? // 備考（任意）
+  sortOrder Int              @default(0) // 研修項目表示順（内部）
+  sectionId Int? // 紐づく研修セクション
+  section   TrainingSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  // 研修項目 1〜5：表示フラグ＋値（セクションの研修ヘッダー1〜5に対応）
+  flag1  Boolean @default(true)
+  value1 String?
+  flag2  Boolean @default(false)
+  value2 String?
+  flag3  Boolean @default(false)
+  value3 String?
+  flag4  Boolean @default(false)
+  value4 String?
+  flag5  Boolean @default(false)
+  value5 String?
+
+  materials              TrainingMaterial[] // この項目に紐づく研修教材
+  requiredQualifications Qualification[]    @relation("ItemRequiredQuals") // 必要資格（資格マスタ参照）
+  evalStamps             EvalStamp[]        // この項目の評価押印（社員ごと）
+  procedureGrades        ProcedureGrade[]   // この項目の手順書採点（社員ごと・ポイント単位）
+  procedureEvals         ProcedureEval[]    // この項目の手順書採点の総合結果（社員ごと）
+  waitingOrders          WaitingOrder[]     // この項目の作業待ち手動並び順
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+// 評価実績（押印）。社員 × 研修項目 × 評価セル(kind:self|admin, idx:1..3) ごとに1件＝押印済み。
+model EvalStamp {
+  id         Int          @id @default(autoincrement())
+  employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  itemId     Int
+  item       TrainingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  kind       String // 'self'（自己評価）/ 'admin'（管理者評価）
+  idx        Int // 1..3（評価列番号）
+  count      Int          @default(0) // カウント種別の現在回数（印/チェック等は0＝押印のみ）
+  createdAt  DateTime     @default(now())
+
+  @@unique([employeeId, itemId, kind, idx])
+}
+
+// 手順書採点。社員 × 研修項目 × 管理者評価列(idx) × 手順(stepIndex) × 見るべきポイント(pointIndex) ごとに 合格/不合格。
+// 管理者評価の列（例: 管理者評価/実技試験）ごとに採点は独立する。
+model ProcedureGrade {
+  id         Int          @id @default(autoincrement())
+  employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  itemId     Int
+  item       TrainingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  idx        Int          @default(0) // 管理者評価の列番号（adminEval{idx}。1始まり）
+  stepIndex  Int // 手順の番号（手順書の steps 配列のインデックス。0始まり）
+  pointIndex Int          @default(0) // 見るべきポイントの番号（step.points 配列のインデックス。0始まり）
+  pass       Boolean      @default(false) // 合格=true / 不合格=false
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([employeeId, itemId, idx, stepIndex, pointIndex])
+}
+
+// 手順書採点の総合結果＋コメント。社員 × 研修項目 × 管理者評価列(idx) で1件。
+// result: 'pass'（全ポイント合格）/ 'fail'（不合格あり）。スタンプ表示の判定に使う。
+model ProcedureEval {
+  id         Int          @id @default(autoincrement())
+  employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  itemId     Int
+  item       TrainingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  idx          Int          @default(0) // 管理者評価の列番号（adminEval{idx}。1始まり）
+  result       String // 'pass' / 'fail'
+  comment      String? // 採点コメント（任意）
+  gradedById   Int? // 採点した評価者の社員ID
+  gradedByName String? // 採点者名（採点時のスナップショット）
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt // 採点日時（最終更新＝採点時刻）
+
+  @@unique([employeeId, itemId, idx])
+}
+
+// 作業待ちの手動並び順。研修項目 × 社員 ごとに position を保持。
+// 行が1件でも存在する項目＝手動並び替え済み。作業待ちの母集団自体は履修/優先から算出。
+model WaitingOrder {
+  id         Int          @id @default(autoincrement())
+  itemId     Int
+  item       TrainingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  position   Int // 並び順（0始まり。小さいほど先頭）
+  createdAt  DateTime     @default(now())
+
+  @@unique([itemId, employeeId])
+}
+
+// 研修教材マスタ（データ要件スプレッドシート準拠）
+// 研修項目に紐づく教材コンテンツ。研修詳細ブロック1〜8（表示フラグ＋タイトル＋内容）。
+// 後回し: 手順書（工程グリッド）/ 画像・動画の実ファイルアップロード（添付はURL/ファイル名で代替）
+model TrainingMaterial {
+  id            Int           @id @default(autoincrement()) // 研修教材ID（内部）
+  note          String? // 備考（任意）
+  sortOrder     Int           @default(0) // 表示順（内部）
+  attachmentUrl String? // 添付画像・動画（URL/ファイル名。実アップロードは後日）
+  procedure     String? // 手順書（工程と見るべきポイント）の JSON
+  itemId        Int? // 紐づく研修項目
+  item          TrainingItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  // 研修詳細ブロック 1〜8：表示フラグ＋タイトル＋内容
+  detail1Flag    Boolean @default(true)
+  detail1Title   String?
+  detail1Content String?
+  detail2Flag    Boolean @default(false)
+  detail2Title   String?
+  detail2Content String?
+  detail3Flag    Boolean @default(false)
+  detail3Title   String?
+  detail3Content String?
+  detail4Flag    Boolean @default(false)
+  detail4Title   String?
+  detail4Content String?
+  detail5Flag    Boolean @default(false)
+  detail5Title   String?
+  detail5Content String?
+  detail6Flag    Boolean @default(false)
+  detail6Title   String?
+  detail6Content String?
+  detail7Flag    Boolean @default(false)
+  detail7Title   String?
+  detail7Content String?
+  detail8Flag    Boolean @default(false)
+  detail8Title   String?
+  detail8Content String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 資格マスタ（データ要件スプレッドシート準拠）
+// 項目: 資格ID（内部=id）/ 資格名 / 資格区分（区分は選択式）/ 資格有効期限
+// 資格マスタ（資格名・区分の一覧。有効期限は保有資格マスタ側で人ごとに保持）
+model Qualification {
+  id            Int                 @id @default(autoincrement()) // 資格ID（内部）
+  name          String // 資格名（必須）
+  category      String? // 資格区分（国家資格/民間資格/社内資格）
+  holders       HeldQualification[] // この資格を保有する社員
+  requiredItems TrainingItem[]      @relation("ItemRequiredQuals") // この資格を必要とする研修項目
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+// 保有資格マスタ（データ要件スプレッドシート準拠）
+// 社員と資格(資格マスタ)の紐づけ。区分・有効期限は資格マスタから参照。
+model HeldQualification {
+  id              Int           @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  qualificationId Int
+  qualification   Qualification @relation(fields: [qualificationId], references: [id], onDelete: Cascade)
+  acquiredDate    DateTime? // 取得日（人ごと）
+  validUntil      DateTime? // 有効期限（人ごと・取得日により異なる）
+  createdAt       DateTime      @default(now())
+
+  @@unique([employeeId, qualificationId]) // 同じ資格の重複保有を防ぐ
+}
+
+// 社員マスタ（データ要件スプレッドシート準拠）
+// 部署に紐づく。ロールは受講者/評価者/管理者。パスワードはハッシュ化保存。
+// 後回し: 研修コース（研修マスタ未作成）/ 配属部署履歴（履歴機能）
+model Employee {
+  id           Int         @id @default(autoincrement()) // ユーザーID（内部）
+  employeeNo   String      @unique // 社員番号（一意）
+  name         String // 氏名
+  role         String      @default("受講者") // ロール（受講者/評価者/管理者）
+  phone        String? // 電話番号
+  birthDate    DateTime? // 生年月日
+  hireDate     DateTime? // 入社年月日
+  assignedDate DateTime? // 配属日
+  passwordHash String? // パスワード（scryptハッシュ。APIでは返さない）
+  departmentId      Int? // 所属部署
+  department        Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  permission        Permission? // この社員の画面アクセス権限
+  heldQualifications HeldQualification[] // この社員の保有資格
+  examApplications   ExamApplication[]   // この社員の筆記試験申請
+  enrolledCourses    TrainingCourse[]    @relation("EmployeeCourses") // 履修コース（研修コースマスタ参照）
+  evalStamps         EvalStamp[]         // この社員の評価押印
+  procedureGrades    ProcedureGrade[]    // この社員の手順書採点（ポイント単位）
+  procedureEvals     ProcedureEval[]     // この社員の手順書採点の総合結果
+  waitingOrders      WaitingOrder[]      // この社員の作業待ち手動並び順
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+// 筆記試験申請（自己評価画面の「筆記試験申請」ボタンから作成）
+// フロー: 申請(申請中) → 管理者が承認(承認済) → 受験 → 合否結果。研修コースはセクションから辿る。
+model ExamApplication {
+  id          Int              @id @default(autoincrement())
+  sectionId   Int? // 申請対象の研修セクション
+  section     TrainingSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  applicantId Int? // 申請者（社員）
+  applicant   Employee?        @relation(fields: [applicantId], references: [id], onDelete: SetNull)
+  appliedAt   DateTime         @default(now()) // 申請日時
+  status      String           @default("申請中") // 申請中 / 承認済
+  approvedAt  DateTime? // 承認日時
+  result      String? // 合否結果（合格 / 不合格 / 未判定=null）
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+// 権限マスタ（データ要件スプレッドシート準拠）
+// 社員1人につき1件。付与された画面権限を JSON 配列(文字列)で保持。
+model Permission {
+  id         Int      @id @default(autoincrement()) // 権限ID（内部）
+  employeeId Int      @unique // 対象ユーザー
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  granted    String? // 付与された権限ラベルの JSON 配列
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// 新着情報（通知）
+// scope で宛先を決める: user=特定社員 / location=特定拠点の全員 / all=全社員
+// audience: home=ホーム画面の新着情報 / admin=管理画面の新着情報
+// excludeId: ブロードキャストで除外する社員（本人）。dedupeKey: 重複生成の防止（バッジ/資格/マスタ等）。
+model Notification {
+  id          Int                @id @default(autoincrement())
+  scope       String             @default("user") // user / location / all
+  recipientId Int? // scope=user の宛先社員
+  locationId  Int? // scope=location の対象拠点
+  excludeId   Int? // ブロードキャストで除外する社員
+  audience    String             @default("home") // home / admin
+  category    String // eval / exam / badge / master / waiting / qual
+  title       String
+  body        String?
+  link        String? // クリック時の遷移先パス
+  actorName   String? // 実行者名
+  dedupeKey   String?            @unique // 同一通知の重複防止キー（任意）
+  createdAt   DateTime           @default(now())
+  reads       NotificationRead[]
+}
+
+// 通知の既読（社員ごと）。行が存在＝その社員が開封済み。
+model NotificationRead {
+  id             Int          @id @default(autoincrement())
+  notificationId Int
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  employeeId     Int
+  readAt         DateTime     @default(now())
+
+  @@unique([notificationId, employeeId])
+}

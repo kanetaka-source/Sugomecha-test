@@ -1,0 +1,13 @@
+node_modules
+dist
+.DS_Store
+*.local
+*.tsbuildinfo
+vite.config.ts.timestamp-*.mjs
+.env
+.env.*
+!.env.example
+.vercel
+
+# サンドボックス生成の一時ファイル退避先（ローカルで削除してOK）
+.sandbox-tmp

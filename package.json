@@ -1,0 +1,41 @@
+{
+  "name": "izumi-sugomeca",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "tsx watch server/index.ts",
+    "dev:all": "concurrently -n web,api -c blue,green \"npm:dev\" \"npm:server\"",
+    "postinstall": "prisma generate --schema server/prisma/schema.prisma",
+    "db:seed": "tsx server/prisma/seed.ts",
+    "db:studio": "prisma studio --schema server/prisma/schema.prisma",
+    "db:migrate:dev": "prisma migrate dev --schema server/prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema server/prisma/schema.prisma",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^10.0.3",
+    "postcss": "^8.4.47",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.22.4",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}
