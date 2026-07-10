@@ -1,9 +1,9 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "memory": 1024,
       "maxDuration": 15
     }
