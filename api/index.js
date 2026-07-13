@@ -1437,6 +1437,39 @@ app.get("/api/score-updates", async (_req, res) => {
     res.status(500).json({ error: "\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F" });
   }
 });
+app.get("/api/dashboard-bootstrap", async (req, res) => {
+  const employeeId = parseId(req.query.employeeId);
+  try {
+    const [coursesRaw, sectionsRaw, items, stamps, employee] = await Promise.all([
+      prisma.trainingCourse.findMany({
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: { _count: { select: { sections: true } } }
+      }),
+      prisma.trainingSection.findMany({
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: { ...sectionInclude, _count: { select: { items: true } } }
+      }),
+      prisma.trainingItem.findMany({
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        include: itemInclude
+      }),
+      employeeId != null ? prisma.evalStamp.findMany({
+        where: { employeeId },
+        select: { employeeId: true, itemId: true, kind: true, idx: true, count: true }
+      }) : Promise.resolve([]),
+      employeeId != null ? prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude }).catch(() => null) : Promise.resolve(null)
+    ]);
+    res.json({
+      courses: coursesRaw.map(({ _count, ...c }) => ({ ...c, sectionCount: _count.sections })),
+      sections: sectionsRaw.map(({ _count, ...s }) => ({ ...s, itemCount: _count.items })),
+      items,
+      stamps,
+      employee: employee ? publicEmployee(employee) : null
+    });
+  } catch {
+    res.status(500).json({ error: "\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F" });
+  }
+});
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`API \u30B5\u30FC\u30D0\u30FC\u8D77\u52D5: http://localhost:${PORT}`);

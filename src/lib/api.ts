@@ -410,6 +410,19 @@ export type EmployeeInput = {
 // 評価実績（押印）。社員ごとの自己評価/管理者評価。count はカウント種別の現在回数。
 export type EvalStamp = { itemId: number; kind: 'self' | 'admin'; idx: number; count: number }
 
+// ダッシュボード初期表示のまとめ取得（courses/sections/items/stamps/employee を1リクエストで）
+export type DashboardBootstrap = {
+  courses: TrainingCourse[]
+  sections: TrainingSection[]
+  items: TrainingItem[]
+  stamps: (EvalStamp & { employeeId: number })[]
+  employee: Employee | null
+}
+export const dashboardApi = {
+  bootstrap: (employeeId?: number): Promise<DashboardBootstrap> =>
+    fetch(`/api/dashboard-bootstrap${employeeId != null ? `?employeeId=${employeeId}` : ''}`).then(handle),
+}
+
 export const evalStampsApi = {
   list: (employeeId: number): Promise<EvalStamp[]> =>
     fetch(`/api/eval-stamps?employeeId=${employeeId}`).then(handle),

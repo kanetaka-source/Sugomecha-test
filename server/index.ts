@@ -1637,6 +1637,47 @@ app.get('/api/score-updates', async (_req, res) => {
   }
 })
 
+// ダッシュボード初期表示用のまとめ取得。
+// courses / sections / items / stamps / employee を1回のリクエストにまとめることで、
+// サーバーレス関数が同時に何個も起動する（＝コールドスタートが重複する）のを防ぐ。
+app.get('/api/dashboard-bootstrap', async (req, res) => {
+  const employeeId = parseId(req.query.employeeId)
+  try {
+    const [coursesRaw, sectionsRaw, items, stamps, employee] = await Promise.all([
+      prisma.trainingCourse.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        include: { _count: { select: { sections: true } } },
+      }),
+      prisma.trainingSection.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        include: { ...sectionInclude, _count: { select: { items: true } } },
+      }),
+      prisma.trainingItem.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+        include: itemInclude,
+      }),
+      employeeId != null
+        ? prisma.evalStamp.findMany({
+            where: { employeeId },
+            select: { employeeId: true, itemId: true, kind: true, idx: true, count: true },
+          })
+        : Promise.resolve([]),
+      employeeId != null
+        ? prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude }).catch(() => null)
+        : Promise.resolve(null),
+    ])
+    res.json({
+      courses: coursesRaw.map(({ _count, ...c }) => ({ ...c, sectionCount: _count.sections })),
+      sections: sectionsRaw.map(({ _count, ...s }) => ({ ...s, itemCount: _count.items })),
+      items,
+      stamps,
+      employee: employee ? publicEmployee(employee) : null,
+    })
+  } catch {
+    res.status(500).json({ error: '取得に失敗しました' })
+  }
+})
+
 // ローカル開発時のみ待受を開始（Vercel 上ではサーバーレス関数として呼び出されるため listen しない）
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {

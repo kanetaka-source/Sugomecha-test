@@ -2,13 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { StatusCard, type MasterBadgeVM, type SpecialBadgeVM } from '../components/StatusCard'
 import { TrainingCard } from '../components/TrainingCard'
 import {
-  trainingCoursesApi,
-  trainingSectionsApi,
-  trainingItemsApi,
-  employeesApi,
-  evalStampsApi,
-  heldQualificationsApi,
+  dashboardApi,
   notificationsApi,
+  heldQualificationsApi,
   type TrainingCourse,
   type TrainingSection,
   type TrainingItem,
@@ -66,22 +62,14 @@ export default function DashboardPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const [cs, secs, its] = await Promise.all([
-          trainingCoursesApi.list(),
-          trainingSectionsApi.list(),
-          trainingItemsApi.list(),
-        ])
-        setCourses(applySavedOrder(cs))
-        setSections(secs)
-        setItems(its)
+        const boot = await dashboardApi.bootstrap(currentUser?.id)
+        setCourses(applySavedOrder(boot.courses))
+        setSections(boot.sections)
+        setItems(boot.items)
         if (currentUser) {
-          const [ss, me] = await Promise.all([
-            evalStampsApi.list(currentUser.id),
-            employeesApi.get(currentUser.id).catch(() => null),
-          ])
-          setStamps(stampsToSet(ss))
-          setCounts(countsToMap(ss))
-          setMyRole(me?.role ?? null)
+          setStamps(stampsToSet(boot.stamps))
+          setCounts(countsToMap(boot.stamps))
+          setMyRole(boot.employee?.role ?? null)
         }
       } catch (e: any) {
         setError(e.message)
