@@ -5,11 +5,19 @@ import express from 'express'
 import cors from 'cors'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
+import { withAccelerate } from '@prisma/extension-accelerate'
 
 // サーバーレス環境（Vercel）ではリクエストのたびに新規接続が増えないよう、
 // PrismaClient をグローバルにキャッシュして使い回す。
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
-const prisma = globalForPrisma.prisma ?? new PrismaClient()
+// ACCELERATE_URL が設定されている場合は Prisma Accelerate（コネクションプーリング＋キャッシュ）経由で接続する。
+function createPrismaClient(): any {
+  if (process.env.ACCELERATE_URL) {
+    return new PrismaClient({ datasourceUrl: process.env.ACCELERATE_URL }).$extends(withAccelerate())
+  }
+  return new PrismaClient()
+}
+const globalForPrisma = globalThis as unknown as { prisma?: any }
+const prisma = globalForPrisma.prisma ?? createPrismaClient()
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 // パスワードを安全に保存（scryptハッシュ。平文は保存しない）

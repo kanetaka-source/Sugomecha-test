@@ -3,8 +3,15 @@ import express from "express";
 import cors from "cors";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { withAccelerate } from "@prisma/extension-accelerate";
+function createPrismaClient() {
+  if (process.env.ACCELERATE_URL) {
+    return new PrismaClient({ datasourceUrl: process.env.ACCELERATE_URL }).$extends(withAccelerate());
+  }
+  return new PrismaClient();
+}
 var globalForPrisma = globalThis;
-var prisma = globalForPrisma.prisma ?? new PrismaClient();
+var prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 function hashPassword(pw) {
   const salt = randomBytes(16).toString("hex");
