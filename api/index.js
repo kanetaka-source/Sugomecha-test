@@ -36,6 +36,33 @@ async function getEmployeeLocationId(employeeId) {
   });
   return emp?.department?.locationId ?? null;
 }
+async function listNotificationsFor(employeeId, audience) {
+  let where;
+  if (audience === "admin") {
+    where = { audience: "admin" };
+  } else {
+    const locationId = await getEmployeeLocationId(employeeId);
+    const or = [{ scope: "all" }, { scope: "user", recipientId: employeeId }];
+    if (locationId != null) or.push({ scope: "location", locationId });
+    where = { audience: "home", OR: or };
+  }
+  const rows = await prisma.notification.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { reads: { where: { employeeId }, select: { id: true } } }
+  });
+  return rows.filter((n) => n.excludeId == null || n.excludeId !== employeeId).map((n) => ({
+    id: n.id,
+    category: n.category,
+    title: n.title,
+    body: n.body,
+    link: n.link,
+    actorName: n.actorName,
+    createdAt: n.createdAt,
+    read: n.reads.length > 0
+  }));
+}
 async function notify(data) {
   try {
     if (data.dedupeKey) {
@@ -1305,31 +1332,7 @@ app.get("/api/notifications", async (req, res) => {
   const audience = req.query.audience === "admin" ? "admin" : "home";
   if (employeeId == null) return res.status(400).json({ error: "employeeId \u304C\u5FC5\u8981\u3067\u3059" });
   try {
-    let where;
-    if (audience === "admin") {
-      where = { audience: "admin" };
-    } else {
-      const locationId = await getEmployeeLocationId(employeeId);
-      const or = [{ scope: "all" }, { scope: "user", recipientId: employeeId }];
-      if (locationId != null) or.push({ scope: "location", locationId });
-      where = { audience: "home", OR: or };
-    }
-    const rows = await prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: { reads: { where: { employeeId }, select: { id: true } } }
-    });
-    const list = rows.filter((n) => n.excludeId == null || n.excludeId !== employeeId).map((n) => ({
-      id: n.id,
-      category: n.category,
-      title: n.title,
-      body: n.body,
-      link: n.link,
-      actorName: n.actorName,
-      createdAt: n.createdAt,
-      read: n.reads.length > 0
-    }));
+    const list = await listNotificationsFor(employeeId, audience);
     res.json(list);
   } catch (e) {
     res.status(500).json({ error: "\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F" });
@@ -1440,7 +1443,7 @@ app.get("/api/score-updates", async (_req, res) => {
 app.get("/api/dashboard-bootstrap", async (req, res) => {
   const employeeId = parseId(req.query.employeeId);
   try {
-    const [coursesRaw, sectionsRaw, items, stamps, employee] = await Promise.all([
+    const [coursesRaw, sectionsRaw, items, stamps, employee, notifications] = await Promise.all([
       prisma.trainingCourse.findMany({
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         include: { _count: { select: { sections: true } } }
@@ -1457,14 +1460,16 @@ app.get("/api/dashboard-bootstrap", async (req, res) => {
         where: { employeeId },
         select: { employeeId: true, itemId: true, kind: true, idx: true, count: true }
       }) : Promise.resolve([]),
-      employeeId != null ? prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude }).catch(() => null) : Promise.resolve(null)
+      employeeId != null ? prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude }).catch(() => null) : Promise.resolve(null),
+      employeeId != null ? listNotificationsFor(employeeId, "home") : Promise.resolve([])
     ]);
     res.json({
       courses: coursesRaw.map(({ _count, ...c }) => ({ ...c, sectionCount: _count.sections })),
       sections: sectionsRaw.map(({ _count, ...s }) => ({ ...s, itemCount: _count.items })),
       items,
       stamps,
-      employee: employee ? publicEmployee(employee) : null
+      employee: employee ? publicEmployee(employee) : null,
+      notifications
     });
   } catch {
     res.status(500).json({ error: "\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F" });

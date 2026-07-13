@@ -417,6 +417,7 @@ export type DashboardBootstrap = {
   items: TrainingItem[]
   stamps: (EvalStamp & { employeeId: number })[]
   employee: Employee | null
+  notifications: NotificationItem[]
 }
 export const dashboardApi = {
   bootstrap: (employeeId?: number): Promise<DashboardBootstrap> =>

@@ -52,6 +52,37 @@ async function getEmployeeLocationId(employeeId: number | null): Promise<number 
   return emp?.department?.locationId ?? null
 }
 
+// 新着情報一覧の取得（/api/notifications と /api/dashboard-bootstrap で共用）
+async function listNotificationsFor(employeeId: number, audience: 'home' | 'admin') {
+  let where: any
+  if (audience === 'admin') {
+    where = { audience: 'admin' }
+  } else {
+    const locationId = await getEmployeeLocationId(employeeId)
+    const or: any[] = [{ scope: 'all' }, { scope: 'user', recipientId: employeeId }]
+    if (locationId != null) or.push({ scope: 'location', locationId })
+    where = { audience: 'home', OR: or }
+  }
+  const rows = await prisma.notification.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    include: { reads: { where: { employeeId }, select: { id: true } } },
+  })
+  return rows
+    .filter((n) => n.excludeId == null || n.excludeId !== employeeId)
+    .map((n) => ({
+      id: n.id,
+      category: n.category,
+      title: n.title,
+      body: n.body,
+      link: n.link,
+      actorName: n.actorName,
+      createdAt: n.createdAt,
+      read: n.reads.length > 0,
+    }))
+}
+
 type NotifyInput = {
   scope?: 'user' | 'location' | 'all'
   recipientId?: number | null
@@ -1497,33 +1528,7 @@ app.get('/api/notifications', async (req, res) => {
   const audience = req.query.audience === 'admin' ? 'admin' : 'home'
   if (employeeId == null) return res.status(400).json({ error: 'employeeId が必要です' })
   try {
-    let where: any
-    if (audience === 'admin') {
-      where = { audience: 'admin' }
-    } else {
-      const locationId = await getEmployeeLocationId(employeeId)
-      const or: any[] = [{ scope: 'all' }, { scope: 'user', recipientId: employeeId }]
-      if (locationId != null) or.push({ scope: 'location', locationId })
-      where = { audience: 'home', OR: or }
-    }
-    const rows = await prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: { reads: { where: { employeeId }, select: { id: true } } },
-    })
-    const list = rows
-      .filter((n) => n.excludeId == null || n.excludeId !== employeeId)
-      .map((n) => ({
-        id: n.id,
-        category: n.category,
-        title: n.title,
-        body: n.body,
-        link: n.link,
-        actorName: n.actorName,
-        createdAt: n.createdAt,
-        read: n.reads.length > 0,
-      }))
+    const list = await listNotificationsFor(employeeId, audience)
     res.json(list)
   } catch (e: any) {
     res.status(500).json({ error: '取得に失敗しました' })
@@ -1643,7 +1648,7 @@ app.get('/api/score-updates', async (_req, res) => {
 app.get('/api/dashboard-bootstrap', async (req, res) => {
   const employeeId = parseId(req.query.employeeId)
   try {
-    const [coursesRaw, sectionsRaw, items, stamps, employee] = await Promise.all([
+    const [coursesRaw, sectionsRaw, items, stamps, employee, notifications] = await Promise.all([
       prisma.trainingCourse.findMany({
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         include: { _count: { select: { sections: true } } },
@@ -1665,6 +1670,7 @@ app.get('/api/dashboard-bootstrap', async (req, res) => {
       employeeId != null
         ? prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude }).catch(() => null)
         : Promise.resolve(null),
+      employeeId != null ? listNotificationsFor(employeeId, 'home') : Promise.resolve([]),
     ])
     res.json({
       courses: coursesRaw.map(({ _count, ...c }) => ({ ...c, sectionCount: _count.sections })),
@@ -1672,6 +1678,7 @@ app.get('/api/dashboard-bootstrap', async (req, res) => {
       items,
       stamps,
       employee: employee ? publicEmployee(employee) : null,
+      notifications,
     })
   } catch {
     res.status(500).json({ error: '取得に失敗しました' })

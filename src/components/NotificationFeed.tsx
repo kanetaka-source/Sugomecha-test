@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { notificationsApi, type NotificationItem } from '../lib/api'
 
@@ -31,17 +31,25 @@ export function NotificationFeed({
   audience = 'home',
   reloadSignal = 0,
   heightClass = 'h-48',
+  initialItems,
 }: {
   employeeId: number
   audience?: 'home' | 'admin'
   reloadSignal?: number
   heightClass?: string
+  // まとめ取得（dashboard-bootstrap）で先に持っている場合、初回の再フェッチを省略できる
+  initialItems?: NotificationItem[]
 }) {
-  const [items, setItems] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<NotificationItem[]>(initialItems ?? [])
+  const [loading, setLoading] = useState(initialItems == null)
   const navigate = useNavigate()
+  const skipNextFetch = useRef(initialItems != null)
 
   useEffect(() => {
+    if (skipNextFetch.current) {
+      skipNextFetch.current = false
+      return
+    }
     let alive = true
     setLoading(true)
     notificationsApi

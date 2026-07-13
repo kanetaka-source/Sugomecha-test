@@ -8,6 +8,7 @@ import {
   type TrainingCourse,
   type TrainingSection,
   type TrainingItem,
+  type NotificationItem,
 } from '../lib/api'
 import { stampsToSet, countsToMap, isItemEvaluated, isItemAllPassed } from '../lib/evalProgress'
 import { getCurrentUser } from '../lib/currentUser'
@@ -23,6 +24,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notifSignal, setNotifSignal] = useState(0) // 派生通知の生成後にフィードを再取得するためのシグナル
+  const [initialNotifications, setInitialNotifications] = useState<NotificationItem[] | undefined>(undefined)
   const currentUser = getCurrentUser()
 
   // ドラッグ並び替え（順番は localStorage に保存）
@@ -70,6 +72,7 @@ export default function DashboardPage() {
           setStamps(stampsToSet(boot.stamps))
           setCounts(countsToMap(boot.stamps))
           setMyRole(boot.employee?.role ?? null)
+          setInitialNotifications(boot.notifications)
         }
       } catch (e: any) {
         setError(e.message)
@@ -174,8 +177,14 @@ export default function DashboardPage() {
       {/* 新着情報 */}
       <section>
         <h2 className="mb-3 text-base font-bold text-ink2">新着情報</h2>
-        {currentUser ? (
-          <NotificationFeed employeeId={currentUser.id} audience="home" reloadSignal={notifSignal} heightClass="h-56" />
+        {currentUser && !loading ? (
+          <NotificationFeed
+            employeeId={currentUser.id}
+            audience="home"
+            reloadSignal={notifSignal}
+            heightClass="h-56"
+            initialItems={initialNotifications}
+          />
         ) : (
           <div className="card-grad h-40 overflow-y-auto bg-surface p-4 shadow-sm">
             <p className="text-sm text-muted">新着情報はありません。</p>
