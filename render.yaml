@@ -1,0 +1,25 @@
+# Render Blueprint（Infrastructure as Code）
+# https://render.com の「New +」→「Blueprint」からこのリポジトリを指定すると、
+# ここに定義した Web Service が自動的に作成されます（DB は Neon 側で別途作成し、
+# 発行された接続文字列を Render の環境変数として手動で設定してください）。
+#
+# 単一の Web Service でビルド済みフロントエンド（dist/）と API（/api/*）の両方を配信します。
+services:
+  - type: web
+    name: sugomecha-test
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install && npm run render-build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Neon の「Pooled connection」文字列（末尾に ?sslmode=require&pgbouncer=true&connection_limit=1 を付与）
+      - key: DATABASE_URL
+        sync: false
+      # Neon の「Direct connection」文字列（prisma migrate deploy 用）
+      - key: DIRECT_URL
+        sync: false

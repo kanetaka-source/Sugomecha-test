@@ -348,3 +348,41 @@ UI調整（2026-07-01）:
 - ProgressPage のロール制御（評価者/管理者のみ管理者評価を編集可）動作確認済み。
 - 通知: ホーム/管理フィード表示・クリック遷移・既読の永続化・他者合格が同拠点のみ（別拠点E3は非表示）を確認。
 - total point がホームで実データ（例: 4/9pt）表示を確認。
+
+---
+
+## 11. デプロイ（Neon + Render・並行環境）
+
+Vercel + Supabase 本番はそのまま維持しつつ、Render + Neon を追加のデプロイ先として構築する場合の手順。
+単一の Render Web Service がビルド済みフロント（`dist/`）と API（`/api/*`）の両方を配信する構成
+（`server/index.ts` が `dist/` の静的配信 + SPA フォールバックを行うよう対応済み）。
+
+### 11.1 Neon（DB）
+1. https://neon.tech でプロジェクトを新規作成（リージョンは Render 側と同じ/近いものを推奨）。
+2. ダッシュボードの **Connection Details** から接続文字列を2つ取得:
+   - ホスト名に `-pooler` が付いた方 → `DATABASE_URL`（末尾に `?sslmode=require&pgbouncer=true&connection_limit=1` を付与）
+   - `-pooler` が付かない方（直接接続） → `DIRECT_URL`（`?sslmode=require`）
+   （`.env.example` の Neon 用コメントを参照）
+3. ローカルまたはCIから一度だけ本番用マイグレーションを適用する場合:
+   ```bash
+   DATABASE_URL=... DIRECT_URL=... npx prisma migrate deploy --schema server/prisma/schema.prisma
+   ```
+   Render 側では `npm start`（= `prisma migrate deploy && node api/index.js`）がデプロイの度に自動実行するため、通常は手動実行不要。
+
+### 11.2 Render（フロント + API を1サービスで配信）
+1. このリポジトリを Render に接続し、**New + → Web Service**（または `render.yaml` を使う場合は **New + → Blueprint**）でリポジトリを指定。
+2. 設定値（`render.yaml` に定義済み。手動設定する場合は以下を入力）:
+   - Build Command: `npm install && npm run render-build`（= `vite build` でフロントを `dist/` に、`esbuild` で API を `api/index.js` にビルド）
+   - Start Command: `npm start`（= `prisma migrate deploy` の後 `node api/index.js` を起動。Express が `process.env.PORT` で待受）
+   - Health Check Path: `/api/health`
+3. **Environment** に以下を追加:
+   - `DATABASE_URL`（Neon の Pooled connection）
+   - `DIRECT_URL`（Neon の Direct connection）
+   - `NODE_ENV=production`
+4. Deploy 実行後、`https://<サービス名>.onrender.com/api/health` で `{"ok":true}`、`https://<サービス名>.onrender.com/` でログイン画面が表示されれば疎通OK。
+
+### 11.3 仕組みの要点（Vercel構成との違い）
+- Vercel では静的配信を Vercel 自身が行い、`api/index.js` は `/api/*` のみを受け持つサーバーレス関数だった。
+- Render は常駐サーバーのため、`server/index.ts` に `dist/` の `express.static` 配信 + `/api/` 以外を `index.html` に返す SPA フォールバックを追加（`fs.existsSync(distPath)` で存在時のみ有効化。Vercel では `dist/` はそもそも Express プロセスから見えないため無害）。
+- `PORT` は `process.env.PORT`（Render が自動付与）を優先し、未設定時のみ `3001`（ローカル用）にフォールバック。
+- 同じ `api/index.js`（esbuild バンドル）を Vercel では関数として import、Render では `node api/index.js` として直接実行することで、ビルド成果物を使い回している。
