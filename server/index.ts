@@ -1,8 +1,12 @@
-// IZUMI すごメカ — API サーバー（Express + Prisma + PostgreSQL/Supabase）
+// IZUMI すごメカ — API サーバー（Express + Prisma + PostgreSQL/Supabase or Neon）
 // ローカル起動: npm run server  /  画面と同時起動: npm run dev:all
 // 本番（Vercel）: api/index.ts 経由でサーバーレス関数として実行される
+// 本番（Render）: 同じバンドル(api/index.js)を `node api/index.js` でそのまま起動し、
+//                Express が PORT で待受＋ビルド済みフロント(dist/)も配信する
 import express from 'express'
 import cors from 'cors'
+import path from 'node:path'
+import fs from 'node:fs'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { PrismaClient } from '@prisma/client'
 import { withAccelerate } from '@prisma/extension-accelerate'
@@ -141,7 +145,8 @@ async function notifyMaster(action: '追加' | '更新' | '削除', kind: string
 }
 
 const app = express()
-const PORT = 3001
+// Render 等では PORT が環境変数で渡される（未指定時はローカル用に 3001）
+const PORT = Number(process.env.PORT) || 3001
 
 app.use(cors())
 app.use(express.json())
@@ -1693,9 +1698,21 @@ app.get('/api/dashboard-bootstrap', async (req, res) => {
   }
 })
 
-// ローカル開発時のみ待受を開始（Vercel 上ではサーバーレス関数として呼び出されるため listen しない）
+// 本番（Render 等）: ビルド済みフロントエンド（dist/）が存在すれば静的配信し、
+// /api/* 以外の全パスを index.html にフォールバック（SPA のクライアントサイドルーティング用）。
+// Vercel では静的配信自体は Vercel 側（outputDirectory: dist）が行うため、この分岐は無害。
+const distPath = path.join(process.cwd(), 'dist')
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath))
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
+
+// ローカル開発時・Render 等の常駐サーバーでのみ待受を開始
+// （Vercel 上ではサーバーレス関数として呼び出されるため listen しない）
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`API サーバー起動: http://localhost:${PORT}`)
   })
 }
