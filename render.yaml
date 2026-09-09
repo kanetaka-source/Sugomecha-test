@@ -11,7 +11,9 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: npm install && npm run render-build
+    # NODE_ENV=production だと npm install が devDependencies（vite/tsc/esbuild等）を
+    # スキップしビルドが失敗するため、--include=dev で明示的に含める
+    buildCommand: npm install --include=dev && npm run render-build
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
